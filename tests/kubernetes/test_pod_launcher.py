@@ -22,6 +22,7 @@ from airflow.kubernetes.pod_launcher import PodLauncher
 
 import unittest
 import mock
+from unittest.mock import MagicMock, patch
 
 
 class TestPodLauncher(unittest.TestCase):
@@ -101,3 +102,43 @@ class TestPodLauncher(unittest.TestCase):
             self.pod_launcher.read_pod,
             mock.sentinel
         )
+
+    def test_handle_istio_proxy_low_version(self):
+        sidecar = MagicMock()
+        sidecar.name = "istio-proxy"
+        sidecar.image = "istio/proxyv2:1.2.9"
+        pod = MagicMock()
+        pod.spec.containers = [sidecar]
+        self.mock_kube_client.read_namespaced_pod.return_value = pod
+        self.assertRaises(
+            AirflowException,
+            self.pod_launcher._handle_istio_proxy,
+            MagicMock()
+        )
+
+    @patch("airflow.kubernetes.pod_launcher.kubernetes_stream")
+    def test_handle_istio_proxy(self, mock_stream):
+        reps_mock = MagicMock()
+        mock_stream.return_value = reps_mock
+        sidecar = MagicMock()
+        sidecar.name = "istio-proxy"
+        sidecar.image = f"istio/proxyv2:1.3.0"
+        pod = MagicMock()
+        pod.spec.containers = [sidecar]
+        self.mock_kube_client.read_namespaced_pod.return_value = pod
+        self.pod_launcher._handle_istio_proxy(MagicMock())
+        mock_stream.assert_called_once()
+        reps_mock.write_stdin.assert_called_once()
+        reps_mock.close.assert_called_once()
+
+    @patch("airflow.kubernetes.pod_launcher.kubernetes_stream")
+    def test_handle_istio_with_no_sidecar(self, mock_stream):
+        mock_stream.return_value = MagicMock()
+        pod = MagicMock()
+        pod.spec.containers = []
+        self.mock_kube_client.read_namespaced_pod.return_value = pod
+        self.pod_launcher._handle_istio_proxy(MagicMock())
+        mock_stream.assert_not_called()
+
+if __name__ == "__main__":
+    unittest.main()
