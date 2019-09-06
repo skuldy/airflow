@@ -35,10 +35,10 @@ from .kube_client import get_kube_client
 
 # Used to calculate semantic versioning
 try:
-  from packaging.version import parse as semantic_version
+    from packaging.version import parse as semantic_version
 except ImportError:
-  # Python 2
-  from distutils.version import LooseVersion as semantic_version
+    # Python 2
+    from distutils.version import LooseVersion as semantic_version
 
 class PodStatus:
     PENDING = 'pending'
@@ -199,28 +199,30 @@ class PodLauncher(LoggingMixin):
         # describe the pod
         pod = self.read_pod(pod)
         for container in pod.spec.containers:
-            if container.name == SidecarNames.ISTIO_PROXY:
-              # Check if supported version of istio-proxy.
-              # If we can't tell the version, proceed anyways.
-              if ":" in container.image:
+            if container.name != SidecarNames.ISTIO_PROXY:
+                continue
+            # Check if supported version of istio-proxy.
+            # If we can't tell the version, proceed anyways.
+            if ":" in container.image:
                 _, tag = container.image.split(":")
                 if semantic_version(tag) < semantic_version("1.3.0-rc.0"):
-                  raise AirflowException(
-                      'Please use istio version 1.3.0+ for KubeExecutor compatibility. Detected version {}'.format(tag))
-              #  exec into the container
-              resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
-                                       pod.name, pod.namespace,
-                                       container=SidecarNames.ISTIO_PROXY,
-                                       command=['/bin/sh'], stdin=True, stdout=True,
-                                       stderr=True, tty=False,
-                                       _preload_content=False)
-              # cleanly quit using the self-shutdown endpoint
-              # /quitquitquit is a sidecar convention introduced by Envoy
-              try:
-                  self._exec_pod_command(resp, 'curl http://127.0.0.1:15020/quitquitquit')
-              finally:
-                  resp.close()
-              return True
+                    raise AirflowException(
+                        'Please use istio version 1.3.0+ for KubeExecutor compatibility.' +\
+                        ' Detected version {}'.format(tag))
+            #  exec into the container
+            resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
+                                     pod.name, pod.namespace,
+                                     container=SidecarNames.ISTIO_PROXY,
+                                     command=['/bin/sh'], stdin=True, stdout=True,
+                                     stderr=True, tty=False,
+                                     _preload_content=False)
+            # cleanly quit using the self-shutdown endpoint
+            # /quitquitquit is a sidecar convention introduced by Envoy
+            try:
+                self._exec_pod_command(resp, 'curl http://127.0.0.1:15020/quitquitquit')
+            finally:
+                resp.close()
+            return True
         return False
 
     def _extract_xcom(self, pod):
