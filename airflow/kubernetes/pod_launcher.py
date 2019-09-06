@@ -33,6 +33,12 @@ from airflow import AirflowException
 from requests.exceptions import BaseHTTPError
 from .kube_client import get_kube_client
 
+# Used to calculate semantic versioning
+try:
+  from packaging.version import parse as semantic_version
+except ImportError:
+  # Python 2
+  from distutils.version import LooseVersion as semantic_version
 
 class PodStatus:
     PENDING = 'pending'
@@ -40,6 +46,8 @@ class PodStatus:
     FAILED = 'failed'
     SUCCEEDED = 'succeeded'
 
+class SidecarNames:
+    ISTIO_PROXY = 'istio-proxy'
 
 class PodLauncher(LoggingMixin):
     def __init__(self, kube_client=None, in_cluster=True, cluster_context=None,
@@ -105,13 +113,14 @@ class PodLauncher(LoggingMixin):
             for line in logs:
                 self.log.info(line)
         result = None
+        while self.base_container_is_running(pod):
+            self.log.info('Container %s has state %s', pod.name, State.RUNNING)
+            time.sleep(2)
         if self.extract_xcom:
-            while self.base_container_is_running(pod):
-                self.log.info('Container %s has state %s', pod.name, State.RUNNING)
-                time.sleep(2)
             result = self._extract_xcom(pod)
             self.log.info(result)
             result = json.loads(result)
+        self._handle_istio_proxy(pod)
         while self.pod_is_running(pod):
             self.log.info('Pod %s has state %s', pod.name, State.RUNNING)
             time.sleep(2)
@@ -171,6 +180,48 @@ class PodLauncher(LoggingMixin):
             raise AirflowException(
                 'There was an error reading the kubernetes API: {}'.format(e)
             )
+
+    def _handle_istio_proxy(self, pod):
+        """If an istio-proxy sidecar is detected, attempt to cleanly shutdown.
+        If we detect a version of Istio before it's compatible with Kubernetes
+        Jobs, then raise an informative error message.
+
+        Args:
+            pod (V1Pod): The pod which we are checking for the sidecar
+
+        Returns:
+            (bool): True if we detect and exit istio-proxy,
+                    False if we do not detect istio-proxy
+
+        Raises:
+            AirflowException: if we find an istio-proxy, and we can't shut it down.
+        """
+        # describe the pod
+        pod = self.read_pod(pod)
+        for container in pod.spec.containers:
+            if container.name == SidecarNames.ISTIO_PROXY:
+              # Check if supported version of istio-proxy.
+              # If we can't tell the version, proceed anyways.
+              if ":" in container.image:
+                _, tag = container.image.split(":")
+                if semantic_version(tag) < semantic_version("1.3.0-rc.0"):
+                  raise AirflowException(
+                      'Please use istio version 1.3.0+ for KubeExecutor compatibility. Detected version {}'.format(tag))
+              #  exec into the container
+              resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
+                                       pod.name, pod.namespace,
+                                       container=SidecarNames.ISTIO_PROXY,
+                                       command=['/bin/sh'], stdin=True, stdout=True,
+                                       stderr=True, tty=False,
+                                       _preload_content=False)
+              # cleanly quit using the self-shutdown endpoint
+              # /quitquitquit is a sidecar convention introduced by Envoy
+              try:
+                  self._exec_pod_command(resp, 'curl http://127.0.0.1:15020/quitquitquit')
+              finally:
+                  resp.close()
+              return True
+        return False
 
     def _extract_xcom(self, pod):
         resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
