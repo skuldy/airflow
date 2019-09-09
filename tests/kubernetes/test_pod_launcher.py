@@ -119,7 +119,7 @@ class TestPodLauncher(unittest.TestCase):
     def _handle_istio_proxy_with_sidecar_args(self, args):
         sidecar = MagicMock()
         sidecar.name = "istio-proxy"
-        sidecar.image = f"istio/proxyv2:1.3.0"
+        sidecar.image = "istio/proxyv2:1.3.0"
         sidecar.args = args
         pod = MagicMock()
         pod.spec.containers = [sidecar]
@@ -177,6 +177,7 @@ class TestPodLauncher(unittest.TestCase):
         self.pod_launcher._handle_istio_proxy(MagicMock())
         self.mock_kube_client.connect_get_namespaced_pod_exec.\
             assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -237,7 +237,7 @@ class PodLauncher(LoggingMixin):
                 container=SidecarNames.ISTIO_PROXY,
                 command=['curl',
                          '-XPOST',
-                         f'http://127.0.0.1:{status_port}/quitquitquit'])
+                         'http://127.0.0.1:{}/quitquitquit'.format(status_port)])
 
             return True
         return False
