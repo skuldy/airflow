@@ -32,13 +32,7 @@ from kubernetes.stream import stream as kubernetes_stream
 from airflow import AirflowException
 from requests.exceptions import BaseHTTPError
 from .kube_client import get_kube_client
-
-# Used to calculate semantic versioning
-try:
-    from packaging.version import parse as semantic_version
-except ImportError:
-    # Python 2
-    from distutils.version import LooseVersion as semantic_version
+from packaging.version import parse as semantic_version
 
 class PodStatus:
     PENDING = 'pending'
