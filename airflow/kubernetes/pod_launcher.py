@@ -34,14 +34,17 @@ from requests.exceptions import BaseHTTPError
 from .kube_client import get_kube_client
 from packaging.version import parse as semantic_version
 
+
 class PodStatus:
     PENDING = 'pending'
     RUNNING = 'running'
     FAILED = 'failed'
     SUCCEEDED = 'succeeded'
 
+
 class SidecarNames:
     ISTIO_PROXY = 'istio-proxy'
+
 
 class SleepConfig:
     # Only polls during the start of a pod
@@ -53,6 +56,7 @@ class SleepConfig:
     # to detect when the task is done. The difference
     # between this and POD_RUNNING_POLL is sidecars.
     BASE_CONTAINER_RUNNING_POLL = 2
+
 
 class PodLauncher(LoggingMixin):
     def __init__(self, kube_client=None, in_cluster=True, cluster_context=None,
@@ -215,7 +219,7 @@ class PodLauncher(LoggingMixin):
                 _, tag = container.image.split(":")
                 if semantic_version(tag) < semantic_version("1.3.0-rc.0"):
                     raise AirflowException(
-                        'Please use istio version 1.3.0+ for KubernetesExecutor compatibility.' +\
+                        'Please use istio version 1.3.0+ for KubernetesExecutor compatibility.' +
                         ' Detected version {}'.format(tag))
 
             # Determine the istio-proxy statusPort, which is where /quitquitquit is implemented.
