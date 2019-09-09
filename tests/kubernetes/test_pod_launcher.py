@@ -22,7 +22,7 @@ from airflow.kubernetes.pod_launcher import PodLauncher
 
 import unittest
 import mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 
 class TestPodLauncher(unittest.TestCase):
