@@ -201,11 +201,14 @@ class PodLauncher(LoggingMixin):
         Raises:
             AirflowException: if we find an istio-proxy, and we can't shut it down.
         """
-        # describe the pod
+        # Describe the pod.
         pod = self.read_pod(pod)
         for container in pod.spec.containers:
+
+            # Skip unless it's a sidecar named as SidecarNames.ISTIO_PROXY.
             if container.name != SidecarNames.ISTIO_PROXY:
                 continue
+
             # Check if supported version of istio-proxy.
             # If we can't tell the version, proceed anyways.
             if ":" in container.image:
@@ -214,19 +217,28 @@ class PodLauncher(LoggingMixin):
                     raise AirflowException(
                         'Please use istio version 1.3.0+ for KubernetesExecutor compatibility.' +\
                         ' Detected version {}'.format(tag))
-            #  exec into the container
-            resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
-                                     pod.name, pod.namespace,
-                                     container=SidecarNames.ISTIO_PROXY,
-                                     command=['/bin/sh'], stdin=True, stdout=True,
-                                     stderr=True, tty=False,
-                                     _preload_content=False)
-            # cleanly quit using the self-shutdown endpoint
-            # /quitquitquit is a sidecar convention introduced by Envoy
-            try:
-                self._exec_pod_command(resp, 'curl http://127.0.0.1:15020/quitquitquit')
-            finally:
-                resp.close()
+
+            # Determine the istio-proxy statusPort, which is where /quitquitquit is implemented.
+            # Default to 15020
+            status_port = "15020"
+            for i in range(len(container.args)):
+                arg = container.args[i]
+                if arg.strip() == "--statusPort":
+                    status_port = container.args[i + 1].strip()
+                    break
+                if arg.strip()[:13] == "--statusPort=":
+                    status_port = arg.strip()[13:]
+                    break
+
+            # Use exec to curl localhost inside of the sidecar.
+            self._client.connect_get_namespaced_pod_exec(
+                pod.name,
+                pod.namespace,
+                container=SidecarNames.ISTIO_PROXY,
+                command=['curl',
+                         '-XPOST',
+                         f'http://127.0.0.1:{status_port}/quitquitquit'])
+
             return True
         return False
 

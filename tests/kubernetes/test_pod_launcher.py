@@ -116,29 +116,67 @@ class TestPodLauncher(unittest.TestCase):
             MagicMock()
         )
 
-    @patch("airflow.kubernetes.pod_launcher.kubernetes_stream")
-    def test_handle_istio_proxy(self, mock_stream):
-        reps_mock = MagicMock()
-        mock_stream.return_value = reps_mock
+    def _handle_istio_proxy_with_sidecar_args(self, args):
         sidecar = MagicMock()
         sidecar.name = "istio-proxy"
         sidecar.image = f"istio/proxyv2:1.3.0"
+        sidecar.args = args
         pod = MagicMock()
         pod.spec.containers = [sidecar]
+        pod.name = "fake-pod-name"
+        pod.namespace = "fake-namespace"
         self.mock_kube_client.read_namespaced_pod.return_value = pod
         self.pod_launcher._handle_istio_proxy(MagicMock())
-        mock_stream.assert_called_once()
-        reps_mock.write_stdin.assert_called_once()
-        reps_mock.close.assert_called_once()
 
-    @patch("airflow.kubernetes.pod_launcher.kubernetes_stream")
-    def test_handle_istio_with_no_sidecar(self, mock_stream):
-        mock_stream.return_value = MagicMock()
+    def test_handle_istio_proxy(self):
+        args = ["proxy",
+                "sidecar",
+                "--statusPort",
+                "12345"]
+        self._handle_istio_proxy_with_sidecar_args(args)
+        self.mock_kube_client.connect_get_namespaced_pod_exec.\
+            assert_called_once_with(
+                "fake-pod-name",
+                "fake-namespace",
+                container="istio-proxy",
+                command=["curl",
+                         "-XPOST",
+                         "http://127.0.0.1:12345/quitquitquit"])
+
+    def test_handle_istio_proxy_other_cli_format(self):
+        args = ["proxy",
+                "sidecar",
+                "--statusPort=12345"]
+        self._handle_istio_proxy_with_sidecar_args(args)
+        self.mock_kube_client.connect_get_namespaced_pod_exec.\
+            assert_called_once_with(
+                "fake-pod-name",
+                "fake-namespace",
+                container="istio-proxy",
+                command=["curl",
+                         "-XPOST",
+                         "http://127.0.0.1:12345/quitquitquit"])
+
+    def test_handle_istio_proxy_no_cli_argument(self):
+        args = ["proxy",
+                "sidecar"]
+        self._handle_istio_proxy_with_sidecar_args(args)
+        self.mock_kube_client.connect_get_namespaced_pod_exec.\
+            assert_called_once_with(
+                "fake-pod-name",
+                "fake-namespace",
+                container="istio-proxy",
+                command=["curl",
+                         "-XPOST",
+                         "http://127.0.0.1:15020/quitquitquit"])
+
+    def test_handle_istio_with_no_sidecar(self):
         pod = MagicMock()
         pod.spec.containers = []
         self.mock_kube_client.read_namespaced_pod.return_value = pod
         self.pod_launcher._handle_istio_proxy(MagicMock())
-        mock_stream.assert_not_called()
+        self.mock_kube_client.connect_get_namespaced_pod_exec.\
+            assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
