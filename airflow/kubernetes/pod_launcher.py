@@ -218,7 +218,7 @@ class PodLauncher(LoggingMixin):
                 _, tag = container.image.split(":")
                 if semantic_version(tag) < semantic_version("1.3.0-rc.0"):
                     raise AirflowException(
-                        'Please use istio version 1.3.0+ for KubeExecutor compatibility.' +\
+                        'Please use istio version 1.3.0+ for KubernetesExecutor compatibility.' +\
                         ' Detected version {}'.format(tag))
             #  exec into the container
             resp = kubernetes_stream(self._client.connect_get_namespaced_pod_exec,
