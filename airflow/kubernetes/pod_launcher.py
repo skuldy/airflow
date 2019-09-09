@@ -49,6 +49,17 @@ class PodStatus:
 class SidecarNames:
     ISTIO_PROXY = 'istio-proxy'
 
+class SleepConfig:
+    # Only polls during the start of a pod
+    POD_STARTING_POLL = 1
+    # Used to detect all cleanup jobs are completed
+    # and the entire Pod is cleaned up
+    POD_RUNNING_POLL = 1
+    # Polls for the duration of the task execution
+    # to detect when the task is done. The difference
+    # between this and POD_RUNNING_POLL is sidecars.
+    BASE_CONTAINER_RUNNING_POLL = 2
+
 class PodLauncher(LoggingMixin):
     def __init__(self, kube_client=None, in_cluster=True, cluster_context=None,
                  extract_xcom=False):
@@ -102,7 +113,7 @@ class PodLauncher(LoggingMixin):
                 delta = dt.now() - curr_time
                 if delta.seconds >= startup_timeout:
                     raise AirflowException("Pod took too long to start")
-                time.sleep(1)
+                time.sleep(SleepConfig.POD_STARTING_POLL)
             self.log.debug('Pod not yet started')
 
         return self._monitor_pod(pod, get_logs)
@@ -115,7 +126,7 @@ class PodLauncher(LoggingMixin):
         result = None
         while self.base_container_is_running(pod):
             self.log.info('Container %s has state %s', pod.name, State.RUNNING)
-            time.sleep(2)
+            time.sleep(SleepConfig.BASE_CONTAINER_RUNNING_POLL)
         if self.extract_xcom:
             result = self._extract_xcom(pod)
             self.log.info(result)
@@ -123,7 +134,7 @@ class PodLauncher(LoggingMixin):
         self._handle_istio_proxy(pod)
         while self.pod_is_running(pod):
             self.log.info('Pod %s has state %s', pod.name, State.RUNNING)
-            time.sleep(2)
+            time.sleep(SleepConfig.POD_RUNNING_POLL)
         return self._task_status(self.read_pod(pod)), result
 
     def _task_status(self, event):
