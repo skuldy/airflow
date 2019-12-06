@@ -477,7 +477,7 @@ def do_setup():
             'sqlalchemy~=1.3',
             'sqlalchemy_jsonfield~=0.9',
             'tabulate>=0.7.5, <0.9',
-            'tenacity==4.12.0',
+            'tenacity>=4.12.0, <=5.0.4',
             'termcolor==1.1.0',
             'text-unidecode==1.2',
             'thrift>=0.9.2',
